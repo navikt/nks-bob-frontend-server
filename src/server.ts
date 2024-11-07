@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { NextFunction, RequestHandler } from 'express';
 import corsMiddleware from 'cors';
 import urlJoin from 'url-join';
 import compression from 'compression';
@@ -19,6 +19,8 @@ import { oboMiddleware } from './middleware/obo-middleware.js';
 import { authInfoRoute } from './route/auth-info-route.js';
 import { proxyMiddleware } from './middleware/proxy-middleware.js';
 import { tracingMiddleware } from "./middleware/tracingMiddleware.js";
+import { Proxy } from './config/proxy-config.js';
+import { IncomingMessage, ServerResponse } from 'http';
 
 const app: express.Application = express();
 
@@ -72,6 +74,7 @@ async function startServer() {
 		}));
 	});
 
+	let proxyMiddlewares: { proxy: Proxy, middleware: RequestHandler }[] = []
 	if (auth) {
 		const tokenValidatorType = mapLoginProviderTypeToValidatorType(auth.loginProviderType);
 		const tokenValidator = await createTokenValidator(tokenValidatorType, auth.loginProvider.discoveryUrl, auth.loginProvider.clientId);
@@ -91,13 +94,14 @@ async function startServer() {
 			});
 		}
 	} else {
-		proxy.proxies.forEach(proxy => {
-			const proxyFrom = routeUrl(proxy.fromPath);
-			app.use(
-				proxyFrom,
-				proxyMiddleware(proxyFrom, proxy)
-			);
-		});
+		proxyMiddlewares = proxy.proxies
+			.map(proxy => ({
+				proxy,
+				middleware: proxyMiddleware(routeUrl(proxy.fromPath), proxy)
+			}))
+
+		proxyMiddlewares.forEach(({ proxy, middleware }) =>
+			app.use(routeUrl(proxy.fromPath), middleware))
 	}
 
 	if (gcs) {
@@ -119,7 +123,11 @@ async function startServer() {
 		app.get(routeUrl('/*'), fallbackRoute(base, dekorator));
 	}
 
-	app.listen(base.port, () => logger.info('Server started successfully'));
+	const server = app.listen(base.port, () => logger.info('Server started successfully'));
+
+	proxyMiddlewares.filter(({ proxy }) => proxy.ws).forEach(({ middleware }) => {
+		server.on("upgrade", (middleware as any).upgrade)
+	})
 }
 
 startServer()
