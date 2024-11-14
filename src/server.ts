@@ -87,12 +87,18 @@ async function startServer() {
 			const oboTokenClient = createClient(oboIssuer, auth.oboProvider.clientId, createJWKS(auth.oboProvider.privateJwk));
 			proxy.proxies.forEach(proxy => {
 				const proxyFrom = routeUrl(proxy.fromPath);
-				app.use(
-					proxyFrom,
-					oboMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator }),
-					proxyMiddleware(proxyFrom, proxy)
-				);
-				wsProxyUpgradeMiddleware = wsUpgradeMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator })
+				if (proxy.ws) {
+					app.use(
+						proxyMiddleware(proxyFrom, proxy)
+					);
+					wsProxyUpgradeMiddleware = wsUpgradeMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator })
+				} else {
+					app.use(
+						proxyFrom,
+						oboMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator }),
+						proxyMiddleware(proxyFrom, proxy)
+					);
+				}
 			});
 		}
 	} else {
