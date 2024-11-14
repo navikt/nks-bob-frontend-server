@@ -15,11 +15,12 @@ import { createTokenValidator, mapLoginProviderTypeToValidatorType } from './uti
 import { createClient, createIssuer } from './utils/auth/auth-client-utils.js';
 import { createJWKS } from './utils/auth/auth-config-utils.js';
 import { frontendEnvRoute } from './route/frontend-env-route.js';
-import { oboMiddleware } from './middleware/obo-middleware.js';
+import { oboMiddleware, wsUpgradeMiddleware } from './middleware/obo-middleware.js';
 import { authInfoRoute } from './route/auth-info-route.js';
 import { proxyMiddleware } from './middleware/proxy-middleware.js';
 import { tracingMiddleware } from "./middleware/tracingMiddleware.js";
 import { Proxy } from './config/proxy-config.js';
+import { Duplex } from 'stream';
 
 const app: express.Application = express();
 
@@ -74,6 +75,7 @@ async function startServer() {
 	});
 
 	let proxyMiddlewares: { proxy: Proxy, middleware: RequestHandler }[] = []
+	let wsProxyUpgradeMiddleware: ((wsMiddleware: any) => (req: Request, socket: Duplex, head: Buffer) => Promise<void>) | null = null
 	if (auth) {
 		const tokenValidatorType = mapLoginProviderTypeToValidatorType(auth.loginProviderType);
 		const tokenValidator = await createTokenValidator(tokenValidatorType, auth.loginProvider.discoveryUrl, auth.loginProvider.clientId);
@@ -90,6 +92,7 @@ async function startServer() {
 					oboMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator }),
 					proxyMiddleware(proxyFrom, proxy)
 				);
+				wsProxyUpgradeMiddleware = wsUpgradeMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator })
 			});
 		}
 	} else {
@@ -125,7 +128,9 @@ async function startServer() {
 	const server = app.listen(base.port, () => logger.info('Server started successfully'));
 
 	proxyMiddlewares.filter(({ proxy }) => proxy.ws).forEach(({ middleware }) => {
-		server.on("upgrade", (middleware as any).upgrade)
+		if (wsProxyUpgradeMiddleware) {
+			server.on("upgrade", wsProxyUpgradeMiddleware(middleware))
+		}
 	})
 }
 

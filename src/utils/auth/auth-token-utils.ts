@@ -1,6 +1,6 @@
 import { TokenSet } from 'openid-client';
 import { assert } from '../assert.js';
-import { Request } from 'express';
+import { Request as ExpressRequest } from 'express';
 import { JsonData } from '../config-utils.js';
 import { fromBase64 } from '../utils.js';
 import { secureLog } from '../logger.js';
@@ -43,8 +43,13 @@ export const tokenSetToOboToken = (tokenSet: TokenSet): OboToken => {
 };
 
 // The header should contain a value in the following format: "Bearer <token>"
-export function getAccessToken(req: Request): string | undefined {
+export function getAccessToken(req: ExpressRequest): string | undefined {
 	const header = req.header(AUTHORIZATION_HEADER);
+	return header?.split(' ')[1];
+}
+
+export function getAccessTokenWs(req: Request): string | undefined {
+	const header = req.headers.get(AUTHORIZATION_HEADER);
 	return header?.split(' ')[1];
 }
 
