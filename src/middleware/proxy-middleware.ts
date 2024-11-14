@@ -1,5 +1,5 @@
 import { RequestHandler } from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 import { logger } from '../utils/logger.js';
 import { Proxy } from '../config/proxy-config.js';
 import { CALL_ID, CONSUMER_ID } from "./tracingMiddleware.js";
@@ -24,7 +24,8 @@ export const proxyMiddleware = (proxyContextPath: string, proxy: Proxy): Request
 					callId: _request.headers[CALL_ID],
 					consumerId: _request.headers[CONSUMER_ID]
 				});
-			}
+			},
+			proxyReq: fixRequestBody
 		}
 	})
 };
