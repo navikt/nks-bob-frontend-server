@@ -14,7 +14,6 @@ export const proxyMiddleware = (proxyContextPath: string, proxy: Proxy): Request
 		},
 		// logger, // Enable this to log each proxied call
 		changeOrigin: true,
-		ws: proxy.ws,
 		on: {
 			error: (error, _request, _response) => {
 				logger.error({
