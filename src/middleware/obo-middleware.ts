@@ -184,9 +184,6 @@ export const setOBOTokenOnWsRequest = async (req: Request, tokenValidator: Token
 
 export function wsUpgradeMiddleware(params: ProxyOboMiddlewareParams) {
 	const { authConfig, proxy, tokenValidator, oboTokenClient, oboTokenStore } = params;
-	const isUsingTokenX = authConfig.oboProviderType === OboProviderType.TOKEN_X;
-	const scope = createAppScope(isUsingTokenX, proxy)
-
 	return (wsMiddleware: any) => {
 		return async (req: Request, socket: Duplex, head: Buffer) => {
 			logger.info({
@@ -194,6 +191,10 @@ export function wsUpgradeMiddleware(params: ProxyOboMiddlewareParams) {
 				callId: req.headers.get(CALL_ID),
 				consumerId: req.headers.get(CONSUMER_ID)
 			});
+
+			const isUsingTokenX = authConfig.oboProviderType === OboProviderType.TOKEN_X;
+			const scope = createAppScope(isUsingTokenX, proxy)
+
 			const error = await setOBOTokenOnWsRequest(req, tokenValidator, oboTokenClient, oboTokenStore, authConfig, scope)
 
 			if (!error) {
