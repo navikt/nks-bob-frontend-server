@@ -85,21 +85,28 @@ async function startServer() {
 			const oboTokenStore = createTokenStore();
 			const oboIssuer = await createIssuer(auth.oboProvider.discoveryUrl);
 			const oboTokenClient = createClient(oboIssuer, auth.oboProvider.clientId, createJWKS(auth.oboProvider.privateJwk));
-			proxy.proxies.forEach(proxy => {
-				const proxyFrom = routeUrl(proxy.fromPath);
-				if (proxy.ws) {
-					app.use(
-						proxyMiddleware(proxyFrom, proxy)
-					);
-					wsProxyUpgradeMiddleware = wsUpgradeMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator })
-				} else {
-					app.use(
-						proxyFrom,
-						oboMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator }),
-						proxyMiddleware(proxyFrom, proxy)
-					);
-				}
-			});
+
+			proxyMiddlewares = proxy.proxies
+				.map(proxy => {
+					const proxyFrom = routeUrl(proxy.fromPath);
+					const middleware = proxyMiddleware(proxyFrom, proxy)
+
+					if (proxy.ws) {
+						app.use(middleware);
+						wsProxyUpgradeMiddleware = wsUpgradeMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator })
+					} else {
+						app.use(
+							proxyFrom,
+							oboMiddleware({ authConfig: auth, proxy, oboTokenStore, oboTokenClient, tokenValidator }),
+							middleware
+						);
+					}
+
+					return ({
+						proxy,
+						middleware
+					})
+				})
 		}
 	} else {
 		proxyMiddlewares = proxy.proxies
