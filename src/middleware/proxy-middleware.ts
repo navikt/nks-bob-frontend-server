@@ -15,6 +15,7 @@ export const proxyMiddleware = (proxyContextPath: string, proxy: Proxy): Request
 		// logger, // Enable this to log each proxied call
 		changeOrigin: true,
 		pathFilter: proxy.ws ? proxyContextPath : undefined,
+		pathRewrite: (path) => path.replace(proxyContextPath, ''),
 		on: {
 			error: (error, _request, _response) => {
 				logger.error({
