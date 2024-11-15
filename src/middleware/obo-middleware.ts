@@ -3,7 +3,6 @@ import { logger } from '../utils/logger.js';
 import {
 	AUTHORIZATION_HEADER,
 	getAccessToken,
-	getAccessTokenWs,
 	getExpiresInSecondWithClockSkew,
 	getTokenSubject,
 	OboTokenStore, WONDERWALL_ID_TOKEN_HEADER
@@ -18,6 +17,7 @@ import { createAzureAdScope, createTokenXScope } from '../utils/auth/auth-config
 import * as express from "express";
 import { CALL_ID, CONSUMER_ID } from "./tracingMiddleware.js";
 import { Duplex } from 'stream';
+import { IncomingMessage } from 'http';
 
 interface ProxyOboMiddlewareParams {
 	authConfig: AuthConfig;
@@ -36,7 +36,7 @@ function createAppScope(isUsingTokenX: boolean, proxy: Proxy): string | null {
 }
 
 interface Error { status: number, message?: string | undefined }
-export const setOBOTokenOnRequest = async (req: express.Request, tokenValidator: TokenValidator,
+export const setOBOTokenOnRequest = async (req: express.Request | IncomingMessage, tokenValidator: TokenValidator,
 	oboTokenClient: BaseClient, oboTokenStore: OboTokenStore, authConfig: AuthConfig, scope: string | null
 ): Promise<Error | undefined> => {
 	const isUsingTokenX = authConfig.oboProviderType === OboProviderType.TOKEN_X;
@@ -119,83 +119,83 @@ export function oboMiddleware(params: ProxyOboMiddlewareParams) {
 	});
 }
 
-export const setOBOTokenOnWsRequest = async (req: Request, tokenValidator: TokenValidator,
-	oboTokenClient: BaseClient, oboTokenStore: OboTokenStore, authConfig: AuthConfig, scope: string | null
-): Promise<Error | undefined> => {
-	const isUsingTokenX = authConfig.oboProviderType === OboProviderType.TOKEN_X;
+// export const setOBOTokenOnWsRequest = async (req: Request, tokenValidator: TokenValidator,
+// 	oboTokenClient: BaseClient, oboTokenStore: OboTokenStore, authConfig: AuthConfig, scope: string | null
+// ): Promise<Error | undefined> => {
+// 	const isUsingTokenX = authConfig.oboProviderType === OboProviderType.TOKEN_X;
 
-	const accessToken = getAccessTokenWs(req);
-	if (!accessToken) {
-		logger.warn({ message: 'Access token is missing from proxy request', callId: req.headers.get(CALL_ID), consumerId: req.headers.get(CONSUMER_ID) });
-		return { status: 401 }
-	}
+// 	const accessToken = getAccessTokenWs(req);
+// 	if (!accessToken) {
+// 		logger.warn({ message: 'Access token is missing from proxy request', callId: req.headers.get(CALL_ID), consumerId: req.headers.get(CONSUMER_ID) });
+// 		return { status: 401 }
+// 	}
 
-	const isValid = await tokenValidator.isValid(accessToken);
-	if (!isValid) {
-		logger.error({ message: 'Access token is not valid', callId: req.headers.get(CALL_ID), consumerId: req.headers.get(CONSUMER_ID) });
-		return { status: 401 }
-	}
+// 	const isValid = await tokenValidator.isValid(accessToken);
+// 	if (!isValid) {
+// 		logger.error({ message: 'Access token is not valid', callId: req.headers.get(CALL_ID), consumerId: req.headers.get(CONSUMER_ID) });
+// 		return { status: 401 }
+// 	}
 
-	// Proxy route is not configured with token-exchange
-	if (!scope) {
-		req.headers.set(AUTHORIZATION_HEADER, '');
-		req.headers.set(WONDERWALL_ID_TOKEN_HEADER, '');
-		return;
-	}
+// 	// Proxy route is not configured with token-exchange
+// 	if (!scope) {
+// 		req.headers.set(AUTHORIZATION_HEADER, '');
+// 		req.headers.set(WONDERWALL_ID_TOKEN_HEADER, '');
+// 		return;
+// 	}
 
-	const tokenSubject = getTokenSubject(accessToken);
-	if (!tokenSubject) {
-		logger.error({ message: 'Unable to get subject from token', callId: req.headers.get(CALL_ID), consumerId: req.headers.get(CONSUMER_ID) });
-		return { status: 401 }
-	}
+// 	const tokenSubject = getTokenSubject(accessToken);
+// 	if (!tokenSubject) {
+// 		logger.error({ message: 'Unable to get subject from token', callId: req.headers.get(CALL_ID), consumerId: req.headers.get(CONSUMER_ID) });
+// 		return { status: 401 }
+// 	}
 
-	let oboToken = await oboTokenStore.getUserOboToken(tokenSubject, scope);
-	if (!oboToken) {
-		const now = new Date().getTime()
+// 	let oboToken = await oboTokenStore.getUserOboToken(tokenSubject, scope);
+// 	if (!oboToken) {
+// 		const now = new Date().getTime()
 
-		oboToken = isUsingTokenX
-			? await createTokenXOnBehalfOfToken(oboTokenClient, scope, accessToken, authConfig.oboProvider.clientId)
-			: await createAzureAdOnBehalfOfToken(oboTokenClient, scope, accessToken);
+// 		oboToken = isUsingTokenX
+// 			? await createTokenXOnBehalfOfToken(oboTokenClient, scope, accessToken, authConfig.oboProvider.clientId)
+// 			: await createAzureAdOnBehalfOfToken(oboTokenClient, scope, accessToken);
 
-		const tokenExchangeTimeMs = new Date().getTime() - now
+// 		const tokenExchangeTimeMs = new Date().getTime() - now
 
-		logger.info({
-			message: `On-behalf-of token created. application=${scope} issuer=${authConfig.oboProviderType} timeTakenMs=${tokenExchangeTimeMs}`,
-			callId: req.headers.get(CALL_ID),
-			consumerId: req.headers.get(CONSUMER_ID)
-		});
+// 		logger.info({
+// 			message: `On-behalf-of token created. application=${scope} issuer=${authConfig.oboProviderType} timeTakenMs=${tokenExchangeTimeMs}`,
+// 			callId: req.headers.get(CALL_ID),
+// 			consumerId: req.headers.get(CONSUMER_ID)
+// 		});
 
-		const expiresInSeconds = getSecondsUntil(oboToken.expiresAt * 1000);
-		const expiresInSecondWithClockSkew = getExpiresInSecondWithClockSkew(expiresInSeconds);
+// 		const expiresInSeconds = getSecondsUntil(oboToken.expiresAt * 1000);
+// 		const expiresInSecondWithClockSkew = getExpiresInSecondWithClockSkew(expiresInSeconds);
 
-		await oboTokenStore.setUserOboToken(tokenSubject, scope, expiresInSecondWithClockSkew, oboToken);
-	} else {
-		logger.info({
-			message: `On-behalf-of fetched from in-memory cache`,
-			callId: req.headers.get(CALL_ID),
-			consumerId: req.headers.get(CONSUMER_ID)
-		});
-	}
+// 		await oboTokenStore.setUserOboToken(tokenSubject, scope, expiresInSecondWithClockSkew, oboToken);
+// 	} else {
+// 		logger.info({
+// 			message: `On-behalf-of fetched from in-memory cache`,
+// 			callId: req.headers.get(CALL_ID),
+// 			consumerId: req.headers.get(CONSUMER_ID)
+// 		});
+// 	}
 
-	req.headers.set(AUTHORIZATION_HEADER, `Bearer ${oboToken.accessToken}`);
-	req.headers.set(WONDERWALL_ID_TOKEN_HEADER, ''); // Vi trenger ikke å forwarde ID-token siden det ikke brukes
-	return;
-}
+// 	req.headers.set(AUTHORIZATION_HEADER, `Bearer ${oboToken.accessToken}`);
+// 	req.headers.set(WONDERWALL_ID_TOKEN_HEADER, ''); // Vi trenger ikke å forwarde ID-token siden det ikke brukes
+// 	return;
+// }
 
 export function wsUpgradeMiddleware(params: ProxyOboMiddlewareParams) {
 	const { authConfig, proxy, tokenValidator, oboTokenClient, oboTokenStore } = params;
 	return (wsMiddleware: any) => {
-		return async (req: Request, socket: Duplex, head: Buffer) => {
+		return async (req: IncomingMessage, socket: Duplex, head: Buffer) => {
 			logger.info({
 				message: `Proxyer websocket upgrade request ${req.url} til applikasjon ${proxy.toApp?.name || proxy.toUrl}`,
-				callId: req.headers.get(CALL_ID),
-				consumerId: req.headers.get(CONSUMER_ID)
+				callId: req.headers[CALL_ID],
+				consumerId: req.headers[CONSUMER_ID]
 			});
 
 			const isUsingTokenX = authConfig.oboProviderType === OboProviderType.TOKEN_X;
 			const scope = createAppScope(isUsingTokenX, proxy)
 
-			const error = await setOBOTokenOnWsRequest(req, tokenValidator, oboTokenClient, oboTokenStore, authConfig, scope)
+			const error = await setOBOTokenOnRequest(req, tokenValidator, oboTokenClient, oboTokenStore, authConfig, scope)
 
 			if (!error) {
 				return wsMiddleware.upgrade(req, socket, head)

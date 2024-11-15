@@ -21,6 +21,7 @@ import { proxyMiddleware } from './middleware/proxy-middleware.js';
 import { tracingMiddleware } from "./middleware/tracingMiddleware.js";
 import { Proxy } from './config/proxy-config.js';
 import { Duplex } from 'stream';
+import { IncomingMessage } from 'http';
 
 const app: express.Application = express();
 
@@ -75,7 +76,7 @@ async function startServer() {
 	});
 
 	let proxyMiddlewares: { proxy: Proxy, middleware: RequestHandler }[] = []
-	let wsProxyUpgradeMiddleware: ((wsMiddleware: any) => (req: Request, socket: Duplex, head: Buffer) => Promise<void>) | null = null
+	let wsProxyUpgradeMiddleware: ((wsMiddleware: any) => (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>) | null = null
 	if (auth) {
 		const tokenValidatorType = mapLoginProviderTypeToValidatorType(auth.loginProviderType);
 		const tokenValidator = await createTokenValidator(tokenValidatorType, auth.loginProvider.discoveryUrl, auth.loginProvider.clientId);

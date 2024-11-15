@@ -4,6 +4,7 @@ import { Request as ExpressRequest } from 'express';
 import { JsonData } from '../config-utils.js';
 import { fromBase64 } from '../utils.js';
 import { secureLog } from '../logger.js';
+import { IncomingMessage } from 'http';
 
 export const AUTHORIZATION_HEADER = 'authorization';
 
@@ -43,15 +44,15 @@ export const tokenSetToOboToken = (tokenSet: TokenSet): OboToken => {
 };
 
 // The header should contain a value in the following format: "Bearer <token>"
-export function getAccessToken(req: ExpressRequest): string | undefined {
-	const header = req.header(AUTHORIZATION_HEADER);
+export function getAccessToken(req: ExpressRequest | IncomingMessage): string | undefined {
+	const header = req.headers[AUTHORIZATION_HEADER];
 	return header?.split(' ')[1];
 }
 
-export function getAccessTokenWs(req: Request): string | undefined {
-	const header = req.headers.get(AUTHORIZATION_HEADER);
-	return header?.split(' ')[1];
-}
+// export function getAccessTokenWs(req: Request): string | undefined {
+// 	const header = req.headers.get(AUTHORIZATION_HEADER);
+// 	return header?.split(' ')[1];
+// }
 
 export function extractTokenPayload(jwtToken: string): JsonData {
 	try {
