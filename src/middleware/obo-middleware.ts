@@ -124,9 +124,14 @@ export function wsUpgradeMiddleware(params: ProxyOboMiddlewareParams) {
 	const { authConfig, proxy, tokenValidator, oboTokenClient, oboTokenStore } = params;
 	return (wsMiddleware: any) => {
 		return async (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+			const callId = req.headers[CALL_ID]
+			if (!callId) {
+				req.headers[CALL_ID] = uuidv4()
+			}
+
 			logger.info({
 				message: `Proxyer websocket upgrade request ${req.url} til applikasjon ${proxy.toApp?.name || proxy.toUrl}`,
-				callId: req.headers[CALL_ID],
+				callId,
 				consumerId: req.headers[CONSUMER_ID]
 			});
 
@@ -134,11 +139,6 @@ export function wsUpgradeMiddleware(params: ProxyOboMiddlewareParams) {
 			const scope = createAppScope(isUsingTokenX, proxy)
 
 			const error = await setOBOTokenOnRequest(req, tokenValidator, oboTokenClient, oboTokenStore, authConfig, scope)
-
-			const callId = req.headers[CALL_ID]
-			if (!callId) {
-				req.headers[CALL_ID] = uuidv4()
-			}
 
 			if (!error) {
 				return wsMiddleware.upgrade(req, socket, head)
